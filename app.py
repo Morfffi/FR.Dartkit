@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import dartkit.core as core  # dartkit/core.py
+import core as core
 
 st.set_page_config(page_title="DART 조회 도구", layout="wide")
 st.title("📊 DART 조회 도구")
@@ -68,3 +68,4 @@ if st.button("조회 실행"):
         )
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+

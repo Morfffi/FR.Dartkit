@@ -195,7 +195,7 @@ if run_clicked:
     df = df.reset_index(drop=True)
     # ==============================
 
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, use_container_width=True, hide_index = True)
     st.download_button(
         "CSV 다운로드",
         df.to_csv(index=False).encode("utf-8-sig"),
@@ -204,5 +204,6 @@ if run_clicked:
     )
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+
 
 

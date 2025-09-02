@@ -25,8 +25,7 @@ def load_codes(api_key: str) -> pd.DataFrame:
     res.raise_for_status()
 
     with zipfile.ZipFile(io.BytesIO(res.content)) as zf:
-        # zip 안에 들어있는 XML 파일(보통 1개)
-        xml_name = zf.namelist()[0]
+        xml_name = zf.namelist()[0]  # 보통 1개
         xml_data = zf.read(xml_name)
 
     root = ET.fromstring(xml_data)
@@ -37,14 +36,17 @@ def load_codes(api_key: str) -> pd.DataFrame:
             "corp_name": child.find("corp_name").text,
             "stock_code": child.find("stock_code").text,
         })
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    # 검색 속도 향상을 위해 소문자 컬럼 추가 (내부용)
+    df["_lc_name"] = df["corp_name"].str.lower()
+    return df
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 쿼리 실행 (api_key를 인자로 포함 → 사용자별/키별 캐시 분리)
 # ──────────────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False, ttl=600)
 def run_query(task, corp_code, api_key, year_from=None, year_to=None):
-    core.api_key = api_key  # core 모듈 전역 키 주입(저장 X)
+    core.api_key = api_key  # core 모듈 전역 키 주입(서버 저장 X)
     if task == "기업개황":
         return core.CorpInfo.get_corp_info(corp_code)
     elif task == "최대주주 변동현황":
@@ -57,7 +59,7 @@ def run_query(task, corp_code, api_key, year_from=None, year_to=None):
         return core.ConvertBond.get_convert_bond(corp_code)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 사이드바 UI
+# 사이드바 UI (API Key/조회항목)
 # ──────────────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.subheader("설정")
@@ -72,9 +74,6 @@ with st.sidebar:
     if remember:
         st.session_state.api_key = api_key_input
 
-    # 회사명(부분 일치) 입력
-    corp_name_input = st.text_input("🏢 회사명(일부 입력 가능)", value="", help="예: 아이큐어")
-
     task = st.selectbox(
         "조회 항목",
         ["기업개황", "최대주주 변동현황", "임원현황(최신)", "임원 주식소유", "전환사채(의사결정)"]
@@ -85,33 +84,59 @@ with st.sidebar:
 st.divider()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# corp_name → corp_code 매핑 (API 키가 있어야 corpCode.xml을 받을 수 있음)
+# 메인 화면: 회사명 검색 → 정확일치 우선, 그다음 부분일치
 # ──────────────────────────────────────────────────────────────────────────────
-df_codes = None
-corp_code = None
+st.subheader("🏢 회사명으로 공시코드 검색")
 
-if api_key_input:
+df_codes: pd.DataFrame | None = None
+corp_code: str | None = None
+
+if not api_key_input:
+    st.info("먼저 왼쪽 사이드바에 DART API Key를 입력하세요.")
+else:
     try:
         df_codes = load_codes(api_key_input)
     except Exception as e:
         st.error(f"기업목록(corpCode.xml) 불러오기 실패: {e}")
 
-# 매핑 UI는 사이드바에 표시
-with st.sidebar:
-    if corp_name_input and df_codes is not None:
-        matches = df_codes[df_codes["corp_name"].str.contains(corp_name_input, case=False, na=False)]
+# 검색 입력
+corp_name_query = st.text_input("회사명(정확 또는 일부)", value="", placeholder="예: 아이큐어, 삼성전자, 현대자동차 등")
 
-        if matches.empty:
-            st.info("해당 이름을 포함하는 기업이 없습니다.")
-        elif len(matches) == 1:
-            corp_code = matches.iloc[0]["corp_code"]
-            st.caption(f"자동 선택: {matches.iloc[0]['corp_name']} → corp_code = {corp_code}")
-        else:
-            options = (matches["corp_name"] + " (" + matches["corp_code"] + ")").tolist()
-            choice = st.selectbox("여러 기업이 검색되었습니다. 선택하세요", options)
-            corp_code = choice.split("(")[-1].strip(")")
+if df_codes is not None and corp_name_query:
+    q = corp_name_query.strip().lower()
 
-    st.text_input("선택된 공시코드", value=corp_code or "", disabled=True)
+    # 1) 정확일치
+    exact = df_codes[df_codes["_lc_name"] == q]
+
+    # 2) 부분일치(정확일치 제외)
+    contains = df_codes[df_codes["_lc_name"].str.contains(q, na=False)]
+    if not exact.empty:
+        contains = contains[~contains.index.isin(exact.index)]
+
+    # 합치기: 정확일치 → 부분일치
+    matches = pd.concat([exact, contains], ignore_index=False)
+    # 너무 많을 때 UI 과부화 방지 (원하면 조정)
+    MAX_SHOW = 200
+    matches_show = matches[["corp_name", "corp_code", "stock_code"]].head(MAX_SHOW).reset_index(drop=True)
+
+    if matches_show.empty:
+        st.warning("해당 이름을 포함/일치하는 기업이 없습니다.")
+    else:
+        st.caption(f"검색 결과: 정확일치 {len(exact)}건 + 부분일치 {len(contains)}건 (표시는 최대 {MAX_SHOW}건)")
+        st.dataframe(matches_show, use_container_width=True, height=300)
+
+        # 선택 위젯
+        options = (matches_show["corp_name"] + " (" + matches_show["corp_code"] + ")").tolist()
+
+        # 정확일치가 1건이면 그걸 기본 선택
+        default_index = 0
+        if len(exact) == 1:
+            # matches_show는 exact가 앞에 오므로 index=0이 정확일치가 됨
+            default_index = 0
+
+        choice = st.radio("사용할 회사를 선택하세요", options, index=default_index, key="corp_pick")
+        corp_code = choice.split("(")[-1].strip(")")
+        st.success(f"선택된 공시코드: {corp_code}")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 실행

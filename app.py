@@ -102,9 +102,9 @@ with st.sidebar:
 
     col_run, col_reset = st.columns(2)
     with col_run:
-        run_clicked = st.button("조회 실행", use_container_width=True)
+        run_clicked = st.button("조회", use_container_width=True)
     with col_reset:
-        reset_clicked = st.button("선택 초기화", use_container_width=True)
+        reset_clicked = st.button("초기화", use_container_width=True)
 
 if reset_clicked:
     for k in ("corp_code", "corp_name_selected", "corp_pick"):
@@ -194,3 +194,4 @@ if run_clicked:
             st.warning("조회 결과가 없습니다.")
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+

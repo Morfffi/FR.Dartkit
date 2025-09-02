@@ -30,13 +30,19 @@ def get_json(url, params=None, timeout=30):
     return data
 
 class CorpInfo:
+    @staticmethod
     def get_corp_info(corp_code):
-        base_url = f'https://opendart.fss.or.kr/api/company.json'
+        base_url = "https://opendart.fss.or.kr/api/company.json"
         data = get_json(base_url, params={"crtfc_key": api_key, "corp_code": corp_code})
         if data is None:
-            return None
-        
-        corp_cls_map = { "Y" : "유가증권", "K" : "코스닥", "N" : "코넥스", "E" : "기타법인" }
+            return pd.DataFrame()
+
+        corp_cls_map = {"Y": "유가증권", "K": "코스닥", "N": "코넥스", "E": "기타법인"}
+
+        # ← 공백/소문자 방지 + unknown 코드는 원본 그대로 보여주기
+        raw_cls = (data.get("corp_cls") or "").strip().upper()
+        corp_cls = corp_cls_map.get(raw_cls, raw_cls)
+
         corp_info = {
             "회사명": data.get("corp_name"),
             "종목코드": data.get("stock_code"),
@@ -45,12 +51,13 @@ class CorpInfo:
             "업종코드": data.get("induty_code"),
             "설립일": data.get("est_dt"),
             "대표자명": data.get("ceo_nm"),
-            "법인구분": corp_cls_map.get(data.get("corp_cls")),
+            "법인구분": corp_cls,  # ← 매핑 적용값 사용
             "주소": data.get("adres"),
             "홈페이지": data.get("hm_url"),
-            "결산월": data.get("acc_mt")
+            "결산월": data.get("acc_mt"),
         }
         return pd.DataFrame([corp_info])
+
 
 class Shareholders:
     @staticmethod
@@ -229,4 +236,5 @@ class ConvertBond:
             }
             records.append(rec)
         return pd.DataFrame(records)
+
 

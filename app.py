@@ -189,11 +189,7 @@ if run_clicked:
             st.warning("조회 결과가 없습니다.")
         else:
             st.success(f"조회 완료! (총 {len(df):,} 행)")
-    # === 첫 번째 의미 없는 열 제거 ===
-    if df.columns[0].startswith("Unnamed"):
-        df = df.drop(df.columns[0], axis=1)
-        df = df.reset_index(drop=True)
-    # ==============================
+
 
     st.dataframe(df, use_container_width=True, hide_index = True)
     st.download_button(
@@ -204,6 +200,7 @@ if run_clicked:
     )
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+
 
 
 

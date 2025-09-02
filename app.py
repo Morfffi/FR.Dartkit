@@ -185,10 +185,26 @@ if run_clicked:
             else:
                 df = run_query(task, corp_code, api_key)
 
-        if df is None or (isinstance(df, pd.DataFrame) and df.empty):
-            st.warning("조회 결과가 없습니다.")
-        else:
+        # ▼▼ 여기부터: df가 있을 때만 정리/표시 ▼▼
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            # 첫 컬럼이 Unnamed로 저장된 경우 제거
+            if len(df.columns) and str(df.columns[0]).startswith("Unnamed"):
+                df = df.drop(df.columns[0], axis=1)
+
+            # 인덱스 초기화 + UI에서 인덱스 숨김
+            df = df.reset_index(drop=True)
             st.success(f"조회 완료! (총 {len(df):,} 행)")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+            st.download_button(
+                "CSV 다운로드",
+                df.to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"{task}_{corp_code}.csv",
+                mime="text/csv",
+            )
+        else:
+            st.warning("조회 결과가 없습니다.")
+
 
 
     st.dataframe(df, use_container_width=True, hide_index = True)
@@ -200,6 +216,7 @@ if run_clicked:
     )
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+
 
 
 

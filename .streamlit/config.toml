@@ -1,1 +1,8 @@
 
+[theme]
+base = "dark"
+primaryColor = "#1DB954"        # 버튼/강조 색상 (원하는 색으로 변경 가능)
+backgroundColor = "#0E1117"     # 전체 배경
+secondaryBackgroundColor = "#262730"
+textColor = "#FAFAFA"
+font = "sans serif"

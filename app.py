@@ -105,9 +105,9 @@ with st.sidebar:
     # 버튼들
     col_run, col_reset = st.columns(2)
     with col_run:
-        run_clicked = st.button("조회 실행", use_container_width=True)
+        run_clicked = st.button("조회", use_container_width=True)
     with col_reset:
-        reset_clicked = st.button("선택 초기화", use_container_width=True)
+        reset_clicked = st.button("초기화", use_container_width=True)
 
 # 초기화 동작: 선택된 회사 정보/위젯 상태 제거 후 새로고침
 if reset_clicked:
@@ -198,3 +198,4 @@ if run_clicked:
             )
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+

@@ -3,37 +3,6 @@ import pandas as pd
 import core as core
 import xml.etree.ElementTree as ET
 
-@st.cache_resource
-def load_codes():
-    tree = ET.parse("corpcode/CORPCODE.xml")
-    root = tree.getroot()
-    data = []
-    for child in root.findall("list"):
-        data.append({
-            "corp_code": child.find("corp_code").text,
-            "corp_name": child.find("corp_name").text,
-            "stock_code": child.find("stock_code").text,
-        })
-    return pd.DataFrame(data)
-
-df_codes = load_codes()
-
-# --- 회사명 입력 후 corp_code 매핑 ---
-corp_name = st.text_input("🏢 회사명(일부 입력 가능)", value="", help="예: 아이큐어")
-corp_code = None
-if corp_name:
-    matches = df_codes[df_codes["corp_name"].str.contains(corp_name, case=False, na=False)]
-    if matches.empty:
-        st.warning("해당 이름을 포함하는 기업이 없습니다.")
-    elif len(matches) == 1:
-        corp_code = matches.iloc[0]["corp_code"]
-        st.success(f"'{corp_name}' → corp_code = {corp_code}")
-    else:
-        option = st.selectbox(
-            "여러 기업이 검색되었습니다. 선택하세요",
-            matches["corp_name"] + " (" + matches["corp_code"] + ")"
-        )
-        corp_code = option.split("(")[-1].strip(")")
 
 st.set_page_config(page_title="DART 조회 도구", layout="wide")
 st.title("📊 DART 조회 도구")

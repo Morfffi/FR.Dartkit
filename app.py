@@ -7,6 +7,28 @@ import xml.etree.ElementTree as ET
 st.set_page_config(page_title="DART 조회 도구", layout="wide")
 st.title("📊 DART 조회 도구")
 
+# --- 공시코드 테이블 로딩 ---
+@st.cache_resource
+def load_codes(path="corpcode/CORPCODE.xml"):
+    tree = ET.parse(path)
+    root = tree.getroot()
+    data = []
+    for child in root.findall("list"):
+        data.append({
+            "corp_code": child.find("corp_code").text,
+            "corp_name": child.find("corp_name").text,
+            "stock_code": child.find("stock_code").text,
+        })
+    return pd.DataFrame(data)
+
+df_codes = load_codes()
+corp_code = None  # 사명 검색 결과로 채워질 변수
+
+
+
+
+
+
 # --- (선택) 브라우저 세션에만 보관하기 ---
 if "api_key" not in st.session_state:
     st.session_state.api_key = ""
@@ -19,7 +41,24 @@ with st.sidebar:
     if remember:
         st.session_state.api_key = api_key_input
 
-    corp_code = st.text_input("🏢 법인(공시)코드", help="예: 아이큐어=00390860")
+        corp_name = st.text_input("🏢 회사명(일부 입력 가능)", value="", help="예: 아이큐어")
+    # 사명으로 corp_code 자동 매핑
+    if corp_name:
+        matches = df_codes[df_codes["corp_name"].str.contains(corp_name, case=False, na=False)]
+        if matches.empty:
+            st.info("해당 이름을 포함하는 기업이 없습니다.")
+        elif len(matches) == 1:
+            corp_code = matches.iloc[0]["corp_code"]
+            st.caption(f"자동 선택: {matches.iloc[0]['corp_name']} → corp_code = {corp_code}")
+        else:
+            option = st.selectbox(
+                "여러 기업이 검색되었습니다. 선택하세요",
+                (matches["corp_name"] + " (" + matches["corp_code"] + ")").tolist()
+            )
+            corp_code = option.split("(")[-1].strip(")")
+    # 선택된 공시코드 보여주기(읽기전용)
+    st.text_input("선택된 공시코드", value=corp_code or "", disabled=True)
+    
     task = st.selectbox(
         "조회 항목",
         ["기업개황", "최대주주 변동현황", "임원현황(최신)", "임원 주식소유", "전환사채(의사결정)"]
@@ -48,8 +87,9 @@ def run_query(task, corp_code, api_key, year_from=None, year_to=None):
 if st.button("조회 실행"):
     api_key = api_key_input or st.session_state.get("api_key", "")
     if not api_key or not corp_code:
-        st.error("API Key와 corp_code를 모두 입력하세요.")
+        st.error("API Key와 회사명(→ 공시코드 선택)을 모두 입력/선택하세요.")
         st.stop()
+
 
     with st.spinner("조회 중..."):
         if task in ("최대주주 변동현황", "임원현황(최신)"):
@@ -70,6 +110,7 @@ if st.button("조회 실행"):
         )
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+
 
 
 

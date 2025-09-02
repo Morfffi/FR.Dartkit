@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import core as core
 import xml.etree.ElementTree as ET
+import requests, zipfile, io
 
 
 st.set_page_config(page_title="DART 조회 도구", layout="wide")
@@ -9,7 +10,27 @@ st.title("📊 DART 조회 도구")
 
 # --- 공시코드 테이블 로딩 ---
 @st.cache_resource
-def load_codes(path="corpcode/CORPCODE.xml"):
+def load_codes(api_key: str):
+    """사용자 API 키로 OpenDART corpCode.zip 내려받아 DataFrame 생성"""
+    url = f"https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key={api_key}"
+    res = requests.get(url)
+    res.raise_for_status()
+
+    # ZIP → XML 추출
+    with zipfile.ZipFile(io.BytesIO(res.content)) as zf:
+        xml_name = zf.namelist()[0]
+        xml_data = zf.read(xml_name)
+
+    root = ET.fromstring(xml_data)
+    data = []
+    for child in root.findall("list"):
+        data.append({
+            "corp_code": child.find("corp_code").text,
+            "corp_name": child.find("corp_name").text,
+            "stock_code": child.find("stock_code").text,
+        })
+    return pd.DataFrame(data)
+
     tree = ET.parse(path)
     root = tree.getroot()
     data = []
@@ -20,12 +41,15 @@ def load_codes(path="corpcode/CORPCODE.xml"):
             "stock_code": child.find("stock_code").text,
         })
     return pd.DataFrame(data)
+    
+corp_code = None
+df_codes = None
+if api_key_input:   # 키를 입력해야 corpCode.xml을 받을 수 있음
+    df_codes = load_codes(api_key_input)
 
-df_codes = load_codes()
-corp_code = None  # 사명 검색 결과로 채워질 변수
-
-
-
+if corp_name and df_codes is not None:
+    matches = df_codes[df_codes["corp_name"].str.contains(corp_name, case=False, na=False)]
+    ...
 
 
 
@@ -110,6 +134,7 @@ if st.button("조회 실행"):
         )
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+
 
 
 

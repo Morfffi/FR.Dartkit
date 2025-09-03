@@ -74,10 +74,11 @@ def run_query(task, corp_code, api_key, year_from=None, year_to=None):
         return core.Execturives.get_execturives(corp_code, years=range(year_from, year_to + 1))
     elif task == "임원 주식소유":
         return core.Execturives.get_executive_shareholdings(corp_code)
-    else:
-        return core.ConvertBond.get_convert_bond(corp_code)
     elif task == "소송현황":
         return core.Lawsuits.get_lawsuits(corp_code)
+    else:
+        return core.ConvertBond.get_convert_bond(corp_code)
+
 
 
 # ──────────────────────────────────────────────────────────────
@@ -197,5 +198,6 @@ if run_clicked:
             st.warning("조회 결과가 없습니다.")
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+
 
 

@@ -1,15 +1,37 @@
-import streamlit as st
+# app.py
+import os
+import io
+import zipfile
+import requests
 import pandas as pd
-import requests, zipfile, io
 import xml.etree.ElementTree as ET
-import core as core  # 같은 폴더의 core.py 사용
+import streamlit as st
+import core as core  # 같은 폴더의 core.py
 
 # ──────────────────────────────────────────────────────────────
-# 기본 설정
+# 페이지 설정
 # ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="DART 조회 도구", layout="wide")
 
-# 선택된 회사 배너(있을 때만) → 제목 위에 표시
+# 서버 비밀/환경변수에서 DART API Key 읽기 (내재화)
+def _read_dart_key():
+    try:
+        return st.secrets.get("DART_API_KEY", "")
+    except Exception:
+        return os.getenv("DART_API_KEY", "") or ""
+
+DEFAULT_DART_KEY = _read_dart_key()
+
+# core.py에 주입 함수가 있으면 전달 (없으면 무시)
+if hasattr(core, "set_api_key"):
+    try:
+        core.set_api_key(DEFAULT_DART_KEY)
+    except Exception:
+        pass
+
+# ──────────────────────────────────────────────────────────────
+# 선택된 회사 배너(있을 때만) → 제목 위 표시
+# ──────────────────────────────────────────────────────────────
 _sel_name = st.session_state.get("corp_name_selected")
 _sel_code = st.session_state.get("corp_code")
 if _sel_name and _sel_code:
@@ -32,15 +54,14 @@ if _sel_name and _sel_code:
 
 st.title("📊 DART 조회 도구")
 
-if "api_key" not in st.session_state:
-    st.session_state.api_key = ""
-
 # ──────────────────────────────────────────────────────────────
-# corpCode.xml → DataFrame 로더
+# corpCode.xml → DataFrame 로더 (DART 키 필요)
 # ──────────────────────────────────────────────────────────────
 @st.cache_resource
-def load_codes(api_key: str) -> pd.DataFrame:
-    url = f"https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key={api_key}"
+def load_codes(dart_key: str) -> pd.DataFrame:
+    if not dart_key:
+        raise RuntimeError("DART API Key가 서버에 설정되어 있지 않습니다.")
+    url = f"https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key={dart_key}"
     res = requests.get(url, timeout=30)
     res.raise_for_status()
 
@@ -61,55 +82,52 @@ def load_codes(api_key: str) -> pd.DataFrame:
     return df
 
 # ──────────────────────────────────────────────────────────────
-# 쿼리 실행
+# 쿼리 실행 (캐시)
 # ──────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False, ttl=600)
-def run_query(task, corp_code, api_key, year_from=None, year_to=None):
-    core.api_key = api_key
+def run_query(task, corp_code, year_from=None, year_to=None):
+    # core 모듈 함수 호출
     if task == "기업개황":
         return core.CorpInfo.get_corp_info(corp_code)
     elif task == "최대주주 변동현황":
         return core.Shareholders.get_major_shareholders(corp_code, years=range(year_from, year_to + 1))
-    elif task == "임원현황":
+    elif task == "임원현황(최신)":
         return core.Execturives.get_execturives(corp_code, years=range(year_from, year_to + 1))
     elif task == "임원 주식소유":
         return core.Execturives.get_executive_shareholdings(corp_code)
-    elif task == "소송현황":
-        return core.Lawsuits.get_lawsuits(corp_code)
-    else:
+    elif task == "전환사채(의사결정)":
         return core.ConvertBond.get_convert_bond(corp_code)
-
-
+    elif task == "소송현황":
+        # 병합 통합 함수가 있으면 우선 사용
+        if hasattr(core, "Lawsuits") and hasattr(core.Lawsuits, "get_lawsuits_merged"):
+            return core.Lawsuits.get_lawsuits_merged(corp_code, "20210101", "20251231")
+        # 없으면 기존 DART 전용으로 fallback
+        return core.Lawsuits.get_lawsuits(corp_code, "20210101", "20251231")
+    else:
+        return pd.DataFrame()
 
 # ──────────────────────────────────────────────────────────────
-# 사이드바 UI
+# 사이드바: 조회 항목 + 버튼들
 # ──────────────────────────────────────────────────────────────
 with st.sidebar:
     st.subheader("설정")
 
-    remember = st.checkbox("세션에 내 키 잠시 저장하기(탭 닫으면 삭제)", value=False)
-    api_key_input = st.text_input(
-        "🔑 DART API Key",
-        type="password",
-        value=st.session_state.api_key if remember else "",
-        help="오픈DART에서 발급받은 개인 API 키"
-    )
-    if remember:
-        st.session_state.api_key = api_key_input
-
     task = st.selectbox(
         "조회 항목",
-        ["기업개황", "최대주주 변동현황", "임원현황", "임원 주식소유", "전환사채 발행", "소송현황"]
+        ["기업개황", "최대주주 변동현황", "임원현황(최신)", "임원 주식소유", "전환사채(의사결정)", "소송현황"]
     )
-    if task in ("최대주주 변동현황", "임원현황"):
+    if task in ("최대주주 변동현황", "임원현황(최신)"):
         year_from, year_to = st.slider("대상 연도 범위", 2016, 2026, (2021, 2025))
+    else:
+        year_from = year_to = None
 
     col_run, col_reset = st.columns(2)
     with col_run:
-        run_clicked = st.button("조회", use_container_width=True)
+        run_clicked = st.button("조회 실행", use_container_width=True)
     with col_reset:
-        reset_clicked = st.button("초기화", use_container_width=True)
+        reset_clicked = st.button("선택 초기화", use_container_width=True)
 
+# 선택 초기화
 if reset_clicked:
     for k in ("corp_code", "corp_name_selected", "corp_pick"):
         if k in st.session_state:
@@ -119,15 +137,15 @@ if reset_clicked:
 st.divider()
 
 # ──────────────────────────────────────────────────────────────
-# 회사명 검색 (메인 화면)
+# 회사명 검색(정확일치 우선→부분일치), 선택 후 UI 숨김
 # ──────────────────────────────────────────────────────────────
-corp_code = st.session_state.get("corp_code", None)
-corp_name_selected = st.session_state.get("corp_name_selected", None)
+corp_code = st.session_state.get("corp_code")
+corp_name_selected = st.session_state.get("corp_name_selected")
 
-df_codes: pd.DataFrame | None = None
-if api_key_input:
+df_codes = None
+if DEFAULT_DART_KEY:
     try:
-        df_codes = load_codes(api_key_input)
+        df_codes = load_codes(DEFAULT_DART_KEY)
     except Exception as e:
         st.error(f"기업목록(corpCode.xml) 불러오기 실패: {e}")
 
@@ -154,36 +172,35 @@ if corp_code is None:
             st.dataframe(matches_show, use_container_width=True, height=300)
 
             options = (matches_show["corp_name"] + " (" + matches_show["corp_code"] + ")").tolist()
-            default_index = 0
-            choice = st.radio("사용할 회사를 선택하세요", options, index=default_index, key="corp_pick")
-            corp_code = choice.split("(")[-1].strip(")")
-            corp_name_selected = choice.split("(")[0].strip()
+            choice = st.radio("사용할 회사를 선택하세요", options, index=0, key="corp_pick")
+            pick_code = choice.split("(")[-1].strip(")")
+            pick_name = choice.split("(")[0].strip()
 
-            st.session_state["corp_code"] = corp_code
-            st.session_state["corp_name_selected"] = corp_name_selected
+            st.session_state["corp_code"] = pick_code
+            st.session_state["corp_name_selected"] = pick_name
             st.rerun()
 
 # ──────────────────────────────────────────────────────────────
-# 실행 (사이드바 버튼으로 트리거)
+# 실행: 사이드바 버튼 클릭 시
 # ──────────────────────────────────────────────────────────────
 if run_clicked:
-    api_key = api_key_input or st.session_state.get("api_key", "")
-
-    if not api_key or not corp_code:
-        st.error("API Key와 회사명(→ 공시코드 선택)을 모두 입력/선택하세요.")
+    if not DEFAULT_DART_KEY:
+        st.error("서버에 설정된 DART API Key가 없습니다. 관리자에게 문의하세요.")
+    elif not corp_code:
+        st.error("회사명(→ 공시코드 선택)을 먼저 완료하세요.")
     else:
         with st.spinner("조회 중..."):
-            if task in ("최대주주 변동현황", "임원현황"):
-                df = run_query(task, corp_code, api_key, year_from, year_to)
+            if task in ("최대주주 변동현황", "임원현황(최신)"):
+                df = run_query(task, corp_code, year_from, year_to)
             else:
-                df = run_query(task, corp_code, api_key)
+                df = run_query(task, corp_code)
 
         if isinstance(df, pd.DataFrame) and not df.empty:
-            # 첫 번째 열이 Unnamed라면 제거
+            # 첫 컬럼명이 Unnamed로 시작하면 제거
             if len(df.columns) and str(df.columns[0]).startswith("Unnamed"):
                 df = df.drop(df.columns[0], axis=1)
 
-            # 인덱스 리셋 + Streamlit에서 인덱스 숨김
+            # 인덱스 리셋 + UI에서 인덱스 숨김
             df = df.reset_index(drop=True)
             st.success(f"조회 완료! (총 {len(df):,} 행)")
             st.dataframe(df, use_container_width=True, hide_index=True)
@@ -194,12 +211,12 @@ if run_clicked:
                 file_name=f"{task}_{corp_code}.csv",
                 mime="text/csv",
             )
-            st.caption("※ 해당 자료는 **주요사항보고서에 기재된 소송만 표시**됩니다.")
+
+            # 소송현황 안내 문구
+            if task == "소송현황":
+                st.caption("※ 해당 자료는 **주요사항보고서에 기재된 소송만 표시**됩니다.")
         else:
             st.warning("조회 결과가 없습니다.")
-          
-st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
 
-
-
-
+# 하단 안내
+st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")

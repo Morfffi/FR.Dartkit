@@ -194,10 +194,12 @@ if run_clicked:
                 file_name=f"{task}_{corp_code}.csv",
                 mime="text/csv",
             )
+            st.caption("※ 해당 자료는 **주요사항보고서에 기재된 소송만 표시**됩니다.")
         else:
             st.warning("조회 결과가 없습니다.")
-
+          
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+
 
 
 

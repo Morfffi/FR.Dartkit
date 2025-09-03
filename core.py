@@ -237,4 +237,45 @@ class ConvertBond:
             records.append(rec)
         return pd.DataFrame(records)
 
+class Lawsuits:
+    @staticmethod
+    def get_lawsuits(corp_code, bgn_de='20210101', end_de='20251231'):
+        """
+        소송 등 중요 사건 공시 조회
+        """
+        base_url = "https://opendart.fss.or.kr/api/lwstLg.json"
+        data = get_json(
+            base_url,
+            params={
+                "crtfc_key": api_key,
+                "corp_code": corp_code,
+                "bgn_de": bgn_de,
+                "end_de": end_de,
+            },
+        )
+        if data is None:
+            return pd.DataFrame()
+
+        items = data.get("list", [])
+        if isinstance(items, dict):
+            items = [items]
+        if not items:
+            return pd.DataFrame()
+
+        records = []
+        for it in items:
+            rec = {
+                "접수번호": it.get("rcept_no", np.nan),
+                "사건의 명칭": it.get("icnm", np.nan),
+                "원고": it.get("ac_ap", np.nan),
+                "청구내용": it.get("rq_cn", np.nan),
+                "관할법원": it.get("cpct", np.nan),
+                "향후대책": it.get("ft_ctp", np.nan),
+                "제기일자": it.get("lgd", np.nan),
+                "확인일자": it.get("cfd", np.nan),
+            }
+            records.append(rec)
+
+        return pd.DataFrame(records)
+
 

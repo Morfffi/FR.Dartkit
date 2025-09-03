@@ -70,12 +70,15 @@ def run_query(task, corp_code, api_key, year_from=None, year_to=None):
         return core.CorpInfo.get_corp_info(corp_code)
     elif task == "최대주주 변동현황":
         return core.Shareholders.get_major_shareholders(corp_code, years=range(year_from, year_to + 1))
-    elif task == "임원현황(최신)":
+    elif task == "임원현황":
         return core.Execturives.get_execturives(corp_code, years=range(year_from, year_to + 1))
     elif task == "임원 주식소유":
         return core.Execturives.get_executive_shareholdings(corp_code)
     else:
         return core.ConvertBond.get_convert_bond(corp_code)
+    elif task == "소송현황":
+        return core.Lawsuits.get_lawsuits(corp_code)
+
 
 # ──────────────────────────────────────────────────────────────
 # 사이드바 UI
@@ -95,9 +98,9 @@ with st.sidebar:
 
     task = st.selectbox(
         "조회 항목",
-        ["기업개황", "최대주주 변동현황", "임원현황(최신)", "임원 주식소유", "전환사채(의사결정)"]
+        ["기업개황", "최대주주 변동현황", "임원현황", "임원 주식소유", "전환사채 발행", "소송현황"]
     )
-    if task in ("최대주주 변동현황", "임원현황(최신)"):
+    if task in ("최대주주 변동현황", "임원현황"):
         year_from, year_to = st.slider("대상 연도 범위", 2016, 2026, (2021, 2025))
 
     col_run, col_reset = st.columns(2)
@@ -169,7 +172,7 @@ if run_clicked:
         st.error("API Key와 회사명(→ 공시코드 선택)을 모두 입력/선택하세요.")
     else:
         with st.spinner("조회 중..."):
-            if task in ("최대주주 변동현황", "임원현황(최신)"):
+            if task in ("최대주주 변동현황", "임원현황"):
                 df = run_query(task, corp_code, api_key, year_from, year_to)
             else:
                 df = run_query(task, corp_code, api_key)
@@ -194,4 +197,5 @@ if run_clicked:
             st.warning("조회 결과가 없습니다.")
 
 st.caption("※ 각 사용자는 본인 오픈DART API Key를 입력해서 사용합니다. 데이터: 금융감독원 OpenDART API")
+
 

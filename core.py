@@ -3,9 +3,18 @@ import requests
 import pandas as pd
 import numpy as np
 
-# Streamlit에서 주입할 전역 api_key
-api_key = os.getenv("DART_API_KEY", "")
+try:
+    import streamlit as st
+    _DART_KEY_FROM_SECRETS = st.secrets.get("DART_API_KEY", "")
+except Exception:
+    _DART_KEY_FROM_SECRETS = ""
 
+api_key = _DART_KEY_FROM_SECRETS or os.getenv("DART_API_KEY", "")
+
+def set_api_key(k: str | None):
+    """(옵션) 앱에서 키를 주입하고 싶을 때 사용. 내재화만 쓰면 호출 안해도 됨."""
+    global api_key
+    api_key = (k or "").strip()
 def get_json(url, params=None, timeout=30):
     try:
         res = requests.get(url, params=params, timeout=timeout)
@@ -277,5 +286,6 @@ class Lawsuits:
             records.append(rec)
 
         return pd.DataFrame(records)
+
 
 

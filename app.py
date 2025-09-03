@@ -123,9 +123,9 @@ with st.sidebar:
 
     col_run, col_reset = st.columns(2)
     with col_run:
-        run_clicked = st.button("조회 실행", use_container_width=True)
+        run_clicked = st.button("조회", use_container_width=True)
     with col_reset:
-        reset_clicked = st.button("선택 초기화", use_container_width=True)
+        reset_clicked = st.button("초기화", use_container_width=True)
 
 # 선택 초기화
 if reset_clicked:
@@ -220,3 +220,4 @@ if run_clicked:
 
 # 하단 안내
 st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")
+

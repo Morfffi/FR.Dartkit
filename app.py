@@ -102,13 +102,18 @@ def run_query(task, corp_code, year_from=None, year_to=None, pivot=False):
     elif task == "전환사채(의사결정)":
         return core.ConvertBond.get_convert_bond(corp_code)
 
+    
     elif task == "재무지표(단일지표)":
-        # FinancialIdx: fnlttSinglIndx.json (피벗 옵션 지원)
-        return core.FinancialIdx.get_financialidx(
-            corp_code,
-            years=range(year_from, year_to + 1),
-            pivot=pivot,
-        )
+        if hasattr(core, "FinancialIdx") and hasattr(core.FinancialIdx, "get_financialidx"):
+            return core.FinancialIdx.get_financialidx(
+                corp_code,
+                years=range(year_from, year_to + 1),
+                pivot=pivot,
+            )
+    else:
+        st.error("core.py에 FinancialIdx.get_financialidx가 없습니다. core.py를 최신 버전으로 업데이트하세요.")
+        return pd.DataFrame()
+
 
     elif task == "소송현황":
         # 병합 통합 함수가 있으면 우선 사용
@@ -247,3 +252,4 @@ if run_clicked:
 
 # 하단 안내
 st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")
+

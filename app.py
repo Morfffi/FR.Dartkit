@@ -136,16 +136,16 @@ with st.sidebar:
             "임원현황(최신)",
             "임원 주식소유",
             "전환사채(의사결정)",
-            "재무지표(단일지표)",    # ← 추가됨
+            "재무지표(별도F/S)",    # ← 추가됨
             "소송현황",
         ]
     )
 
     # 연도/옵션
     pivot = False
-    if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(단일지표)"):
+    if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(별도F/S)"):
         year_from, year_to = st.slider("대상 연도 범위", 2016, 2026, (2021, 2025))
-        if task == "재무지표(단일지표)":
+        if task == "재무지표(별도F/S)":
             pivot = st.checkbox("지표 가로로 보기 (피벗)", value=False)
     else:
         year_from = year_to = None
@@ -219,7 +219,7 @@ if run_clicked:
         st.error("회사명(→ 공시코드 선택)을 먼저 완료하세요.")
     else:
         with st.spinner("조회 중..."):
-            if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(단일지표)"):
+            if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(별도F/S)"):
                 df = run_query(task, corp_code, year_from, year_to, pivot)
             else:
                 df = run_query(task, corp_code)
@@ -249,6 +249,7 @@ if run_clicked:
 
 # 하단 안내
 st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")
+
 
 
 

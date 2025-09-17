@@ -287,5 +287,105 @@ class Lawsuits:
 
         return pd.DataFrame(records)
 
+class FinancialIdx:
+    @staticmethod
+    def get_financialidx(
+        corp_code,
+        years=range(2021, 2026),
+        reprt_codes=(11011, 11014, 11012, 11013),   # 사업>3분기>반기>1분기
+        idx_groups=("M210000", "M220000", "M230000", "M240000"),  # 수익성/안정성/성장성/활동성
+        pivot=False,  # True면 지표명을 가로로 피벗
+    ):
+        """
+        OpenDART fnlttSinglIndx.json 조회
+        반환(세로형): [사업연도, 보고서종류, 지표군, 지표명, 지표값]
+        pivot=True: [사업연도, 보고서종류] 기준으로 지표명을 가로 컬럼으로 전개
+        """
+        base_url = "https://opendart.fss.or.kr/api/fnlttSinglIndx.json"
+
+        reprt_map = {
+            11013: "1분기보고서",
+            11012: "반기보고서",
+            11014: "3분기보고서",
+            11011: "사업보고서",
+        }
+        idx_map = {
+            "M210000": "수익성지표",
+            "M220000": "안정성지표",
+            "M230000": "성장성지표",
+            "M240000": "활동성지표",
+        }
+
+        def to_num(x):
+            if x in (None, "", " "):
+                return pd.NA
+            return pd.to_numeric(str(x).replace(",", ""), errors="coerce")
+
+        frames = []
+
+        for y in years:
+            for rc in reprt_codes:
+                for ig in idx_groups:
+                    data = get_json(
+                        base_url,
+                        params={
+                            "crtfc_key": api_key,      # core.py 전역 DART 키
+                            "corp_code": corp_code,
+                            "bsns_year": y,
+                            "reprt_code": rc,
+                            "idx_cl_code": ig,
+                        },
+                    )
+                    if not data:
+                        continue
+
+                    items = data.get("list", []) or []
+                    if isinstance(items, dict):
+                        items = [items]
+                    if not items:
+                        continue
+
+                    rows = []
+                    for it in items:
+                        rows.append(
+                            {
+                                "사업연도": str(y),
+                                "보고서종류": reprt_map.get(rc, str(rc)),
+                                "지표군": idx_map.get(ig, ig),
+                                "지표명": it.get("idx_nm", pd.NA),
+                                "지표값": to_num(it.get("idx_val")),
+                            }
+                        )
+                    if rows:
+                        frames.append(pd.DataFrame(rows))
+
+        if not frames:
+            return pd.DataFrame()
+
+        df = pd.concat(frames, ignore_index=True)
+
+        # 정렬: 연도 ↑, 보고서(사업>3분기>반기>1분기), 지표군, 지표명
+        order = {"사업보고서": 1, "3분기보고서": 2, "반기보고서": 3, "1분기보고서": 4}
+        df["_yr"] = pd.to_numeric(df["사업연도"], errors="coerce")
+        df["_ord"] = df["보고서종류"].map(order).fillna(9).astype(int)
+        df = df.sort_values(["_yr", "_ord", "지표군", "지표명"]).drop(columns=["_yr", "_ord"]).reset_index(drop=True)
+
+        if not pivot:
+            return df[["사업연도", "보고서종류", "지표군", "지표명", "지표값"]]
+
+        # 가로 피벗
+        wide = (
+            df.pivot_table(
+                index=["사업연도", "보고서종류"],
+                columns="지표명",
+                values="지표값",
+                aggfunc="last",
+            )
+            .sort_index(level=["사업연도", "보고서종류"])
+            .reset_index()
+        )
+        wide.columns.name = None
+        return wide
+
 
 

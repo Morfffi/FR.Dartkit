@@ -103,7 +103,7 @@ def run_query(task, corp_code, year_from=None, year_to=None, pivot=False):
         return core.ConvertBond.get_convert_bond(corp_code)
 
     
-    elif task == "재무지표(단일지표)":
+    elif task == "재무지표(별도FS)":
         if hasattr(core, "FinancialIdx") and hasattr(core.FinancialIdx, "get_financialidx"):
             return core.FinancialIdx.get_financialidx(
                 corp_code,
@@ -249,5 +249,6 @@ if run_clicked:
 
 # 하단 안내
 st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")
+
 
 

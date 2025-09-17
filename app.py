@@ -85,24 +85,38 @@ def load_codes(dart_key: str) -> pd.DataFrame:
 # 쿼리 실행 (캐시)
 # ──────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False, ttl=600)
-def run_query(task, corp_code, year_from=None, year_to=None):
+def run_query(task, corp_code, year_from=None, year_to=None, pivot=False):
     # core 모듈 함수 호출
     if task == "기업개황":
         return core.CorpInfo.get_corp_info(corp_code)
+
     elif task == "최대주주 변동현황":
         return core.Shareholders.get_major_shareholders(corp_code, years=range(year_from, year_to + 1))
+
     elif task == "임원현황(최신)":
         return core.Execturives.get_execturives(corp_code, years=range(year_from, year_to + 1))
+
     elif task == "임원 주식소유":
         return core.Execturives.get_executive_shareholdings(corp_code)
+
     elif task == "전환사채(의사결정)":
         return core.ConvertBond.get_convert_bond(corp_code)
+
+    elif task == "재무지표(단일지표)":
+        # FinancialIdx: fnlttSinglIndx.json (피벗 옵션 지원)
+        return core.FinancialIdx.get_financialidx(
+            corp_code,
+            years=range(year_from, year_to + 1),
+            pivot=pivot,
+        )
+
     elif task == "소송현황":
         # 병합 통합 함수가 있으면 우선 사용
         if hasattr(core, "Lawsuits") and hasattr(core.Lawsuits, "get_lawsuits_merged"):
             return core.Lawsuits.get_lawsuits_merged(corp_code, "20210101", "20251231")
         # 없으면 기존 DART 전용으로 fallback
         return core.Lawsuits.get_lawsuits(corp_code, "20210101", "20251231")
+
     else:
         return pd.DataFrame()
 
@@ -114,10 +128,23 @@ with st.sidebar:
 
     task = st.selectbox(
         "조회 항목",
-        ["기업개황", "최대주주 변동현황", "임원현황(최신)", "임원 주식소유", "전환사채(의사결정)", "소송현황"]
+        [
+            "기업개황",
+            "최대주주 변동현황",
+            "임원현황(최신)",
+            "임원 주식소유",
+            "전환사채(의사결정)",
+            "재무지표(단일지표)",    # ← 추가됨
+            "소송현황",
+        ]
     )
-    if task in ("최대주주 변동현황", "임원현황(최신)"):
+
+    # 연도/옵션
+    pivot = False
+    if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(단일지표)"):
         year_from, year_to = st.slider("대상 연도 범위", 2016, 2026, (2021, 2025))
+        if task == "재무지표(단일지표)":
+            pivot = st.checkbox("지표 가로로 보기 (피벗)", value=False)
     else:
         year_from = year_to = None
 
@@ -190,8 +217,8 @@ if run_clicked:
         st.error("회사명(→ 공시코드 선택)을 먼저 완료하세요.")
     else:
         with st.spinner("조회 중..."):
-            if task in ("최대주주 변동현황", "임원현황(최신)"):
-                df = run_query(task, corp_code, year_from, year_to)
+            if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(단일지표)"):
+                df = run_query(task, corp_code, year_from, year_to, pivot)
             else:
                 df = run_query(task, corp_code)
 
@@ -220,4 +247,3 @@ if run_clicked:
 
 # 하단 안내
 st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")
-

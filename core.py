@@ -15,6 +15,7 @@ def set_api_key(k: str | None):
     """(옵션) 앱에서 키를 주입하고 싶을 때 사용. 내재화만 쓰면 호출 안해도 됨."""
     global api_key
     api_key = (k or "").strip()
+
 def get_json(url, params=None, timeout=30):
     try:
         res = requests.get(url, params=params, timeout=timeout)
@@ -38,6 +39,117 @@ def get_json(url, params=None, timeout=30):
 
     return data
 
+# ──────────────────────────────────────────────
+# 현금유입 총괄 (신주/채권/예탁증권)
+# ──────────────────────────────────────────────
+class CashIn:
+    _COLS = ["구분","납입기일","증권의 종류","발행금액","조달목적","원본"]  # 원본: 어떤 API에서 왔는지
+
+    @staticmethod
+    def _normalize_df(df: pd.DataFrame | None, source: str) -> pd.DataFrame:
+        if df is None or len(df) == 0:
+            return pd.DataFrame(columns=CashIn._COLS)
+
+        # 날짜(yyyymmdd → yyyy-mm-dd)
+        def _fmt_date(s):
+            if pd.isna(s): return np.nan
+            s = str(s)
+            if len(s) == 8 and s.isdigit():
+                return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+            return s
+
+        df = df.copy()
+        if "납입기일" in df.columns:
+            df["납입기일"] = df["납입기일"].apply(_fmt_date)
+
+        if "발행금액" in df.columns:
+            df["발행금액"] = pd.to_numeric(df["발행금액"], errors="coerce")
+
+        df["원본"] = source
+
+        for c in CashIn._COLS:
+            if c not in df.columns:
+                df[c] = np.nan
+        return df[CashIn._COLS]
+
+    @staticmethod
+    def CashInStock(corp_code, bgn_de='20210101', end_de='20251231'):
+        url = "https://opendart.fss.or.kr/api/estkRs.json"  # 신주
+        data = get_json(url, params={"crtfc_key": api_key, "corp_code": corp_code,
+                                     "bgn_de": bgn_de, "end_de": end_de})
+        if not data or "list" not in data:
+            return None
+        records = []
+        for i in data.get("list", []):
+            records.append({
+                "구분": "신주발행",
+                "납입기일": i.get("pymd", np.nan),
+                "증권의 종류": i.get("stksen", np.nan),
+                "발행금액": i.get("amt", np.nan),
+                "조달목적": i.get("se", np.nan),
+            })
+        return pd.DataFrame(records)
+
+    @staticmethod
+    def CashInBond(corp_code, bgn_de='20210101', end_de='20251231'):
+        url = "https://opendart.fss.or.kr/api/bdRs.json"  # 채권
+        data = get_json(url, params={"crtfc_key": api_key, "corp_code": corp_code,
+                                     "bgn_de": bgn_de, "end_de": end_de})
+        if not data or "list" not in data:
+            return None
+        records = []
+        for i in data.get("list", []):
+            records.append({
+                "구분": "채권발행",
+                "납입기일": i.get("pymd", np.nan),
+                "증권의 종류": i.get("bdnmn", np.nan),
+                "발행금액": i.get("amt", np.nan),
+                "조달목적": i.get("se", np.nan),
+            })
+        return pd.DataFrame(records)
+
+    @staticmethod
+    def CashInYe(corp_code, bgn_de='20210101', end_de='20251231'):
+        url = "https://opendart.fss.or.kr/api/stkdpRs.json"  # 증권예탁증권
+        data = get_json(url, params={"crtfc_key": api_key, "corp_code": corp_code,
+                                     "bgn_de": bgn_de, "end_de": end_de})
+        if not data or "list" not in data:
+            return None
+        records = []
+        for i in data.get("list", []):
+            records.append({
+                "구분": "증권예탁증권",
+                "납입기일": i.get("pymd", np.nan),
+                "증권의 종류": i.get("stksen", np.nan),
+                "발행금액": i.get("amt", np.nan),
+                "조달목적": i.get("se", np.nan),
+            })
+        return pd.DataFrame(records)
+
+    @staticmethod
+    def CashInSummary(corp_code, bgn_de='20210101', end_de='20251231', sort_desc=True) -> pd.DataFrame:
+        dfs = []
+        df_stock = CashIn.CashInStock(corp_code, bgn_de, end_de)
+        dfs.append(CashIn._normalize_df(df_stock, "신주"))
+
+        df_bond = CashIn.CashInBond(corp_code, bgn_de, end_de)
+        dfs.append(CashIn._normalize_df(df_bond, "채권"))
+
+        df_dep = CashIn.CashInYe(corp_code, bgn_de, end_de)
+        dfs.append(CashIn._normalize_df(df_dep, "예탁증권"))
+
+        out = pd.concat(dfs, ignore_index=True)
+        out["납입기일_sort"] = pd.to_datetime(out["납입기일"], errors="coerce")
+        out = (
+            out.sort_values("납입기일_sort", ascending=not sort_desc)
+               .drop(columns=["납입기일_sort"])
+               .reset_index(drop=True)
+        )
+        return out
+
+# ──────────────────────────────────────────────
+# 회사 기본/지표/임원/소송 등 기존 클래스들
+# ──────────────────────────────────────────────
 class CorpInfo:
     @staticmethod
     def get_corp_info(corp_code):
@@ -48,7 +160,6 @@ class CorpInfo:
 
         corp_cls_map = {"Y": "유가증권", "K": "코스닥", "N": "코넥스", "E": "기타법인"}
 
-        # ← 공백/소문자 방지 + unknown 코드는 원본 그대로 보여주기
         raw_cls = (data.get("corp_cls") or "").strip().upper()
         corp_cls = corp_cls_map.get(raw_cls, raw_cls)
 
@@ -60,7 +171,7 @@ class CorpInfo:
             "업종코드": data.get("induty_code"),
             "설립일": data.get("est_dt"),
             "대표자명": data.get("ceo_nm"),
-            "법인구분": corp_cls,  # ← 매핑 적용값 사용
+            "법인구분": corp_cls,
             "주소": data.get("adres"),
             "홈페이지": data.get("hm_url"),
             "결산월": data.get("acc_mt"),
@@ -329,7 +440,7 @@ class FinancialIdx:
                     data = get_json(
                         base_url,
                         params={
-                            "crtfc_key": api_key,      # core.py 전역 DART 키
+                            "crtfc_key": api_key,
                             "corp_code": corp_code,
                             "bsns_year": y,
                             "reprt_code": rc,
@@ -386,6 +497,3 @@ class FinancialIdx:
         )
         wide.columns.name = None
         return wide
-
-
-

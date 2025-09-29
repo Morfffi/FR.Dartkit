@@ -8,7 +8,10 @@ import xml.etree.ElementTree as ET
 import streamlit as st
 import core as core  # 같은 폴더의 core.py
 from datetime import date
+import streamlit as st
 
+st.cache_data.clear()
+st.cache_resource.clear()
 # ──────────────────────────────────────────────────────────────
 # 페이지 설정
 # ──────────────────────────────────────────────────────────────
@@ -266,3 +269,4 @@ if run_clicked:
 
 # 하단 안내
 st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")
+

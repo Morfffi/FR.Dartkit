@@ -119,7 +119,7 @@ def run_query(task, corp_code, year_from=None, year_to=None, pivot=False, bgn_de
             return core.Lawsuits.get_lawsuits_merged(corp_code, "20210101", "20251231")
         return core.Lawsuits.get_lawsuits(corp_code, "20210101", "20251231")
 
-    elif task == "현금유입 총괄(신주/채권/예탁)":
+    elif task == "자금조달":
         return core.CashIn.CashInSummary(corp_code, bgn_de=bgn_de, end_de=end_de, sort_desc=sort_desc)
 
     else:
@@ -141,7 +141,7 @@ with st.sidebar:
             "전환사채(의사결정)",
             "재무지표(별도F/S)",   # ← 문자열 통일
             "소송현황",
-            "현금유입 총괄(신주/채권/예탁)",  # ← 신설
+            "자금조달",  # ← 신설
         ]
     )
 
@@ -160,7 +160,7 @@ with st.sidebar:
         if task == "재무지표(별도F/S)":
             pivot = st.checkbox("지표 가로로 보기 (피벗)", value=False)
 
-    if task == "현금유입 총괄(신주/채권/예탁)":
+    if task == "자금조달":
         c1, c2 = st.columns(2)
         with c1:
             d_bgn = st.date_input("시작일", value=date(2021, 1, 1))
@@ -241,7 +241,7 @@ if run_clicked:
         with st.spinner("조회 중..."):
             if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(별도F/S)"):
                 df = run_query(task, corp_code, year_from, year_to, pivot)
-            elif task == "현금유입 총괄(신주/채권/예탁)":
+            elif task == "자금조달":
                 df = run_query(task, corp_code, bgn_de=bgn_de, end_de=end_de, sort_desc=sort_desc)
             else:
                 df = run_query(task, corp_code)
@@ -269,4 +269,5 @@ if run_clicked:
 
 # 하단 안내
 st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")
+
 

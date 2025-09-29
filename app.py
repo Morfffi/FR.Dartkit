@@ -7,6 +7,7 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 import streamlit as st
 import core as core  # 같은 폴더의 core.py
+from datetime import date
 
 # ──────────────────────────────────────────────────────────────
 # 페이지 설정
@@ -85,7 +86,7 @@ def load_codes(dart_key: str) -> pd.DataFrame:
 # 쿼리 실행 (캐시)
 # ──────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False, ttl=600)
-def run_query(task, corp_code, year_from=None, year_to=None, pivot=False):
+def run_query(task, corp_code, year_from=None, year_to=None, pivot=False, bgn_de=None, end_de=None, sort_desc=True):
     # core 모듈 함수 호출
     if task == "기업개황":
         return core.CorpInfo.get_corp_info(corp_code)
@@ -102,8 +103,7 @@ def run_query(task, corp_code, year_from=None, year_to=None, pivot=False):
     elif task == "전환사채(의사결정)":
         return core.ConvertBond.get_convert_bond(corp_code)
 
-    
-    elif task == "재무지표(별도FS)":
+    elif task == "재무지표(별도F/S)":
         if hasattr(core, "FinancialIdx") and hasattr(core.FinancialIdx, "get_financialidx"):
             return core.FinancialIdx.get_financialidx(
                 corp_code,
@@ -111,13 +111,13 @@ def run_query(task, corp_code, year_from=None, year_to=None, pivot=False):
                 pivot=pivot,
             )
 
-
     elif task == "소송현황":
-        # 병합 통합 함수가 있으면 우선 사용
         if hasattr(core, "Lawsuits") and hasattr(core.Lawsuits, "get_lawsuits_merged"):
             return core.Lawsuits.get_lawsuits_merged(corp_code, "20210101", "20251231")
-        # 없으면 기존 DART 전용으로 fallback
         return core.Lawsuits.get_lawsuits(corp_code, "20210101", "20251231")
+
+    elif task == "현금유입 총괄(신주/채권/예탁)":
+        return core.CashIn.CashInSummary(corp_code, bgn_de=bgn_de, end_de=end_de, sort_desc=sort_desc)
 
     else:
         return pd.DataFrame()
@@ -136,19 +136,36 @@ with st.sidebar:
             "임원현황(최신)",
             "임원 주식소유",
             "전환사채(의사결정)",
-            "재무지표(별도F/S)",    # ← 추가됨
+            "재무지표(별도F/S)",   # ← 문자열 통일
             "소송현황",
+            "현금유입 총괄(신주/채권/예탁)",  # ← 신설
         ]
     )
 
-    # 연도/옵션
+    # 공통 보조 함수
+    def _date_to_yyyymmdd(d: date) -> str:
+        return f"{d.year:04d}{d.month:02d}{d.day:02d}"
+
+    # 연도/옵션 or 날짜 범위 UI
     pivot = False
+    year_from = year_to = None
+    bgn_de = end_de = None
+    sort_desc = True
+
     if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(별도F/S)"):
         year_from, year_to = st.slider("대상 연도 범위", 2016, 2026, (2021, 2025))
         if task == "재무지표(별도F/S)":
             pivot = st.checkbox("지표 가로로 보기 (피벗)", value=False)
-    else:
-        year_from = year_to = None
+
+    if task == "현금유입 총괄(신주/채권/예탁)":
+        c1, c2 = st.columns(2)
+        with c1:
+            d_bgn = st.date_input("시작일", value=date(2021, 1, 1))
+        with c2:
+            d_end = st.date_input("종료일", value=date(2025, 12, 31))
+        bgn_de = _date_to_yyyymmdd(d_bgn)
+        end_de = _date_to_yyyymmdd(d_end)
+        sort_desc = st.toggle("최신순 정렬", value=True)
 
     col_run, col_reset = st.columns(2)
     with col_run:
@@ -221,6 +238,8 @@ if run_clicked:
         with st.spinner("조회 중..."):
             if task in ("최대주주 변동현황", "임원현황(최신)", "재무지표(별도F/S)"):
                 df = run_query(task, corp_code, year_from, year_to, pivot)
+            elif task == "현금유입 총괄(신주/채권/예탁)":
+                df = run_query(task, corp_code, bgn_de=bgn_de, end_de=end_de, sort_desc=sort_desc)
             else:
                 df = run_query(task, corp_code)
 
@@ -229,7 +248,6 @@ if run_clicked:
             if len(df.columns) and str(df.columns[0]).startswith("Unnamed"):
                 df = df.drop(df.columns[0], axis=1)
 
-            # 인덱스 리셋 + UI에서 인덱스 숨김
             df = df.reset_index(drop=True)
             st.success(f"조회 완료! (총 {len(df):,} 행)")
             st.dataframe(df, use_container_width=True, hide_index=True)
@@ -241,7 +259,6 @@ if run_clicked:
                 mime="text/csv",
             )
 
-            # 소송현황 안내 문구
             if task == "소송현황":
                 st.caption("※ 해당 자료는 **주요사항보고서에 기재된 소송만 표시**됩니다.")
         else:
@@ -249,7 +266,3 @@ if run_clicked:
 
 # 하단 안내
 st.caption("※ DART API Key는 서버/배포 환경에 안전하게 보관되어 자동 사용됩니다.")
-
-
-
-
